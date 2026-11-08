@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rubik 15x15</title>
+<style>html,body{margin:0;height:100%;background:#fffde7;overflow:hidden}#v{position:fixed;inset:0;touch-action:none;cursor:grab}#v canvas{display:block;width:100%;height:100%}</style>
+</head><body><div id="v"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const Q=`00000001111100110100010000000
+01111101010110101001110111110
+01000101111111111110010100010
+01000101000110000010110100010
+01000101101011010000110100010
+01111101001100001011010111110
+00000001010101010101010000000
+11111111100011111110111111111
+00000100001110000010101010101
+00100111110000110000000101110
+10110101110101000111010101111
+00111011011101100111000000101
+11111100000000011001111010011
+10100011101011110000000001110
+01101100010100001011011000011
+11110010111101010111001101101
+11000000101010001011111110011
+01100111110001010110000001010
+01101001011111000001011101011
+01000010110101010110111111101
+01111001111110111011000001000
+11111111011011011000011100000
+00000001010100000100010100011
+01111101101101000100011101100
+01000101001110001011000001001
+01000101001010110101111110010
+01000101000100001101100000001
+01111101001001111110011010101
+00000001010110100010111101011`.split("\n").map(r=>[...r].map(Number));
+const N=15,COL={W:"#ffffff",Y:"#ffd500",O:"#ff7a00",R:"#c8102e",G:"#009b48",B:"#0046ad"};
+const DARK=["R","G","B"],LIGHT=["W","Y","O"],ALL=[...DARK,...LIGHT],OPP={W:"Y",Y:"W",R:"O",O:"R",G:"B",B:"G"};
+// nilai QR per sisi: 1 gelap, 0 terang, null = bukan bagian QR
+function mod(f,r,c){
+  if(f=="F")return Q[7+r][7+c];
+  if(f=="U")return r>=8?Q[r-8][7+c]:null;
+  if(f=="D")return r<=6?Q[22+r][7+c]:null;
+  if(f=="L")return c>=8?Q[7+r][c-8]:null;
+  if(f=="R")return c<=6?Q[7+r][22+c]:null;
+  return r>=8&&c<=6?Q[r+14][28-c]:null;
+}
+function pos(f,r,c){
+  return f=="F"?[c,14-r,14]:f=="B"?[14-c,14-r,0]:f=="R"?[14,14-r,14-c]:f=="L"?[0,14-r,c]:f=="U"?[c,14,r]:[c,0,14-r];
+}
+// kelompokkan stiker per keping (pojok = 3 stiker, sayap = 2, tengah = 1)
+const st=[],grp={};
+for(const f of "FBRLUD")for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+  const s={f,r,c,v:mod(f,r,c),col:null};st.push(s);(grp[pos(f,r,c)]??=[]).push(s);
+}
+let seed=7;const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+const cnt=Object.fromEntries(ALL.map(k=>[k,0]));
+const gl=Object.values(grp).sort((a,b)=>{const k=g=>(g.some(s=>s.v!==null)?0:2)+(g.length>1?0:1);return k(a)-k(b)});
+let bad=0;
+for(const g of gl){
+  let best=null,bs=1e9;
+  const opts=g.map(s=>s.v===1?DARK:s.v===0?LIGHT:ALL);
+  const rec=(i,cur)=>{
+    if(i==g.length){
+      let v=0,sc=0;
+      for(let a=0;a<cur.length;a++){sc+=cnt[cur[a]]+(cnt[cur[a]]>=225?1e4:0);for(let b=a+1;b<cur.length;b++)if(cur[a]==cur[b]||OPP[cur[a]]==cur[b])v++}
+      sc+=v*1e6+rnd();if(sc<bs){bs=sc;best=cur.slice();best.v=v}return;
+    }
+    for(const k of opts[i]){cur.push(k);rec(i+1,cur);cur.pop()}
+  };
+  rec(0,[]);
+  g.forEach((s,i)=>{s.col=best[i];cnt[best[i]]++});
+  if(best.v)bad++;
+}
+
+const z=32;
+function tex(f){
+  const cv=document.createElement("canvas");cv.width=cv.height=N*z;
+  const x=cv.getContext("2d");x.fillStyle="#1a1a1a";x.fillRect(0,0,N*z,N*z);
+  for(const s of st)if(s.f==f){x.fillStyle=COL[s.col];x.fillRect(s.c*z+2,s.r*z+2,z-4,z-4)}
+  const T=new THREE.CanvasTexture(cv);T.anisotropy=8;return T;
+}
+const host=document.getElementById("v");
+const R=new THREE.WebGLRenderer({antialias:true,alpha:true});
+R.setPixelRatio(Math.min(devicePixelRatio,2));host.appendChild(R.domElement);
+const S=new THREE.Scene(),C=new THREE.PerspectiveCamera(38,1,.1,300);
+const G=new THREE.Group();S.add(G);G.rotation.set(.45,-.6,0);
+G.add(new THREE.Mesh(new THREE.BoxGeometry(N,N,N),new THREE.MeshBasicMaterial({color:0x1a1a1a})));
+const H=N/2+.01;
+const defs={F:[0,0,H,0,0],B:[0,0,-H,0,Math.PI],R:[H,0,0,0,Math.PI/2],L:[-H,0,0,0,-Math.PI/2],U:[0,H,0,-Math.PI/2,0],D:[0,-H,0,Math.PI/2,0]};
+for(const f in defs){const d=defs[f],m=new THREE.Mesh(new THREE.PlaneGeometry(N,N),new THREE.MeshBasicMaterial({map:tex(f)}));m.position.set(d[0],d[1],d[2]);m.rotation.set(d[3],d[4],0);G.add(m)}
+let base=40;
+function size(){const w=host.clientWidth,h=host.clientHeight;R.setSize(w,h,false);C.aspect=w/h;C.updateProjectionMatrix();base=w/h<1?40/(w/h)*.9:40;C.position.z=base}
+addEventListener("resize",size);size();
+let auto=true,pts={},pd=0;
+const clamp=v=>Math.min(100,Math.max(18,v));
+host.addEventListener("pointerdown",e=>{host.setPointerCapture(e.pointerId);pts[e.pointerId]=e;auto=false});
+host.addEventListener("pointermove",e=>{
+  if(!pts[e.pointerId])return;
+  const ids=Object.keys(pts);
+  if(ids.length==2){pts[e.pointerId]=e;const[a,b]=ids.map(i=>pts[i]);const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);if(pd)C.position.z=clamp(C.position.z*pd/d);pd=d;return}
+  G.rotation.y+=(e.clientX-pts[e.pointerId].clientX)*.01;G.rotation.x+=(e.clientY-pts[e.pointerId].clientY)*.01;pts[e.pointerId]=e;
+});
+const up=e=>{delete pts[e.pointerId];pd=0};
+host.addEventListener("pointerup",up);host.addEventListener("pointercancel",up);
+host.addEventListener("wheel",e=>{e.preventDefault();C.position.z=clamp(C.position.z*(1+e.deltaY*.001))},{passive:false});
+(function loop(){requestAnimationFrame(loop);if(auto)G.rotation.y+=.004;R.render(S,C)})();
+</script></body></html>
